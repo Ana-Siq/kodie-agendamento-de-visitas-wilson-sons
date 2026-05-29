@@ -1,0 +1,6 @@
+{
+  "name": "Agendamento de Visitas Wilson Sons",
+  "description": "Sistema de gestão e agendamento de visitas técnicas para os terminais portuários e instalações da Wilson Sons.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

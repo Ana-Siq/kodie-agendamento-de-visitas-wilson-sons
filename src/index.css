@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-navy-900: #001B3A;
+  --color-navy-850: #04254C;
+  --color-navy-800: #0A3263;
+  --color-navy-700: #10437E;
+  --color-navy-600: #1A59A1;
+  --color-navy-500: #2974C6;
+  
+  --color-sky-500: #00A6E0;
+  --color-sky-400: #33BDFA;
+  --color-sky-100: #E6F6FD;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, sans-serif;
+}
+
+@layer utilities {
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .scrollbar-none {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+body {
+  background-color: #F8FAFC;
+  color: #1E293B;
+  font-family: var(--font-sans);
+}
+
