@@ -5,14 +5,14 @@
 
 import React from 'react';
 import { ShieldCheck, Info, XCircle, AlertTriangle, Eye, Footprints, ShieldAlert, Check } from 'lucide-react';
+import safetyImage from '../assets/images/safety_epi_guide_1780092986181.png';
 
 interface SafetySectionProps {
   onNavigateToScheduling: () => void;
 }
 
 export default function SafetySection({ onNavigateToScheduling }: SafetySectionProps) {
-  // Hardcoded image path generated earlier for safety regulations guide
-  const safetyImageSrc = "/src/assets/images/safety_epi_guide_1780092986181.png";
+  const safetyImageSrc = safetyImage;
 
   const epis = [
     {
