@@ -23,7 +23,7 @@ export default function HomeSection({ onNavigateToScheduling, onNavigateToSafety
       desc: "Estudantes de engenharia, logística e comércio exterior vivenciam as operações portuárias reais de perto."
     },
     {
-      icon: <Award className="w-6 h-6 text-sky-450" />,
+      icon: <Award className="w-6 h-6 text-sky-500" />,
       title: "Desenvolvimento de Carreira",
       desc: "Profissionais do setor conhecem de perto a infraestrutura avançada e nossas inovações tecnológicas."
     },

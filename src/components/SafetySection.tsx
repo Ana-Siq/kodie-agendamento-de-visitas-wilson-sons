@@ -17,7 +17,22 @@ export default function SafetySection({ onNavigateToScheduling }: SafetySectionP
   const epis = [
     {
       id: "epi_head",
-      icon: <span className="text-xl">🪖</span>,
+      icon: (
+        <svg className="w-8 h-8 select-none" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Outer high-visibility shell of the safety helmet */}
+          <path d="M2.5 15C2.5 10.5 6.5 6.5 12 6.5C17.5 6.5 21.5 10.5 21.5 15" fill="#FBBF24" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round"/>
+          {/* Industrial reinforcement top ridge/rib */}
+          <path d="M12 2.5V6.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round"/>
+          {/* Left and right support ridges for high-impact dispersion */}
+          <path d="M7.5 4.5C8 5.5 8.5 6.5 8.5 6.5" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M16.5 4.5C16 5.5 15.5 6.5 15.5 6.5" stroke="#B45309" strokeWidth="1.5" strokeLinecap="round"/>
+          {/* Safety visor and heavy duty brim */}
+          <path d="M1 15.2C1 14.5 1.5 14 2 14H22C22.5 14 23 14.5 23 15.2V15.5C23 16 22.5 16.5 22 16.5H2C1.5 16.5 1 16 1 15.5V15.2Z" fill="#F59E0B" stroke="#B45309" strokeWidth="1.5"/>
+          {/* Headband adjustment knob / temple details */}
+          <circle cx="12" cy="11.5" r="1.5" fill="#FFF" stroke="#B45309" strokeWidth="1"/>
+          <path d="M5 14.5V13M19 14.5V13" stroke="#D97706" strokeWidth="1"/>
+        </svg>
+      ),
       name: "Capacete de Segurança",
       description: "Proteção obrigatória contra impactos e queda de objetos suspensos durante a circulação nos cais.",
       tag: "Classe B"
@@ -118,7 +133,7 @@ export default function SafetySection({ onNavigateToScheduling }: SafetySectionP
 
           {/* RED ZONE: Proibição de Regatas */}
           <div className="bg-red-50/90 border border-red-200 p-4 rounded-2xl text-left shadow-xs relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 -mr-6 -mt-6 bg-red-105 rounded-full flex items-center justify-center translate-x-2 -translate-y-2 select-none opacity-5">
+            <div className="absolute top-0 right-0 w-24 h-24 -mr-6 -mt-6 bg-red-100 rounded-full flex items-center justify-center translate-x-2 -translate-y-2 select-none opacity-5">
               <span className="text-7xl font-bold">🚫</span>
             </div>
             

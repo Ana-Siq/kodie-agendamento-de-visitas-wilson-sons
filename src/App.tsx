@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.5
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Anchor, ShieldCheck, CalendarRange, LayoutDashboard, Anchor as AnchorIcon, AlertCircle, HelpCircle } from 'lucide-react';
 import { VisitRequest, IntegrationSettings } from './types';
@@ -17,94 +17,287 @@ import DashboardSection from './components/DashboardSection';
 // Unique ID generator helper
 const generateIdx = () => 'WS-' + Math.floor(100000 + Math.random() * 900000);
 
-// Pre-seeded initial data for an active and beautiful starting dashboard
-const PRE_SEEDED_REQUESTS: VisitRequest[] = [
-  {
-    id: "WS-810231",
-    name: "Carolina Ribeiro Lins",
-    email: "carol.lins@unisantos.edu.br",
-    phone: "(13) 98124-5512",
-    profile: "estudante",
-    institution: "Universidade Católica de Santos (Eng. Portuária)",
-    date: "2026-06-15",
-    time: "manha",
-    visitorsCount: 18,
-    purpose: "Visita de campo para observar a descarga integrada de navios Panamax e logística da ferrovia portuária.",
-    status: "aprovado",
-    createdAt: "2026-05-28T14:20:00Z"
-  },
-  {
-    id: "WS-401294",
-    name: "Comte. Roberto Guimarães",
-    email: "roberto.guimaraes@praticagemrj.com.br",
-    phone: "(21) 99014-4123",
-    profile: "profissional",
-    institution: "Associação de Praticagem Marina Rio",
-    date: "2026-06-22",
-    time: "tarde",
-    visitorsCount: 4,
-    purpose: "Visita técnica de alinhamento operacional para novos rebocadores de propulsão azimutal (ASD).",
-    status: "pendente",
-    createdAt: "2026-05-29T10:15:30Z"
-  },
-  {
-    id: "WS-773194",
-    name: "Felipe Macedo Neto",
-    email: "felipe.macedo.neto@gmail.com",
-    phone: "(11) 97412-0056",
-    profile: "entusiasta",
-    institution: "N/A (Entusiasta)",
-    date: "2026-07-03",
-    time: "manha",
-    visitorsCount: 2,
-    purpose: "Pesquisa pessoal sobre a história do terminal Tecon e acompanhamento das operações de guindastes STS em escala reduzida.",
-    status: "rejeitado",
-    createdAt: "2026-05-29T15:34:11Z"
-  }
-];
-
 export default function App() {
   // Navigation active tab index: 0 = Home, 1 = Safety, 2 = Scheduling, 3 = Dashboard
   const [activeTab, setActiveTab] = useState(0);
 
   // Core schedules state
   const [requests, setRequests] = useState<VisitRequest[]>([]);
+  const [isLoadingSheets, setIsLoadingSheets] = useState(false);
+  const [sheetError, setSheetError] = useState<string | null>(null);
 
-  // Integration variables state
+  // Keep track of statuses edited in this session to bypass Google's slow CDN export caching delay
+  const statusOverrides = useRef<Record<string, 'aprovado' | 'rejeitado'>>({});
+
+  // Integration variables state - Fixed to the provided Apps Script and Sheets URLs as requested!
   const [integration, setIntegration] = useState<IntegrationSettings>({
-    appScriptUrl: '',
-    googleSheetUrl: '',
-    syncEnabled: false
+    appScriptUrl: 'https://script.google.com/macros/s/AKfycbxpOhX9udHttctS9cNxjhuyZY7rhfGcNnfWelVtABYlQ1yLyG6-Ni82key6hBceIuOD/exec',
+    googleSheetUrl: 'https://docs.google.com/spreadsheets/d/1Gjw6zdm7EHgcwju08YlRyCrt1nz0iCyrPutHSEY0fA0/edit?gid=179874347',
+    syncEnabled: true
   });
 
   // Pull records from Local Storage if present during initial loading
   useEffect(() => {
+    const defaultSettings = {
+      appScriptUrl: 'https://script.google.com/macros/s/AKfycbxpOhX9udHttctS9cNxjhuyZY7rhfGcNnfWelVtABYlQ1yLyG6-Ni82key6hBceIuOD/exec',
+      googleSheetUrl: 'https://docs.google.com/spreadsheets/d/1Gjw6zdm7EHgcwju08YlRyCrt1nz0iCyrPutHSEY0fA0/edit?gid=179874347',
+      syncEnabled: true
+    };
+    
+    setIntegration(defaultSettings);
+    localStorage.setItem('WS_INTEGRATION_SETTINGS', JSON.stringify(defaultSettings));
+
     const cachedRequests = localStorage.getItem('WS_VISITS_DATA');
     if (cachedRequests) {
       try {
         setRequests(JSON.parse(cachedRequests));
       } catch (err) {
-        setRequests(PRE_SEEDED_REQUESTS);
+        setRequests([]);
       }
     } else {
-      setRequests(PRE_SEEDED_REQUESTS);
-      localStorage.setItem('WS_VISITS_DATA', JSON.stringify(PRE_SEEDED_REQUESTS));
+      setRequests([]);
     }
 
-    const cachedSettings = localStorage.getItem('WS_INTEGRATION_SETTINGS');
-    if (cachedSettings) {
-      try {
-        setIntegration(JSON.parse(cachedSettings));
-      } catch (err) {
-        // use default empty
-      }
-    }
+    // Auto load data from Google Sheets immediately using the fixed URL
+    fetchRequestsFromSheets(defaultSettings.googleSheetUrl);
   }, []);
 
   // Sync state modifications to Local Storage
   const handlePersistRequests = (updatedList: VisitRequest[]) => {
     setRequests(updatedList);
     localStorage.setItem('WS_VISITS_DATA', JSON.stringify(updatedList));
+  };
+
+  // Fetch and parse live data from the Google Sheet central URL
+  const fetchRequestsFromSheets = async (customSheetUrl?: string): Promise<boolean> => {
+    const targetUrl = customSheetUrl || integration.googleSheetUrl;
+    if (!targetUrl) {
+      setSheetError(null);
+      return false;
+    }
+    
+    setIsLoadingSheets(true);
+    setSheetError(null);
+    try {
+      // 1. Extract Spreadsheet ID
+      const matchId = targetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (!matchId) {
+        setIsLoadingSheets(false);
+        setSheetError("Formato de link inválido da Planilha. Certifique-se de que a URL contém o ID (/d/...) da planilha.");
+        return false;
+      }
+      const spreadsheetId = matchId[1];
+      
+      // 2. Extract Gid (sheet tab ID)
+      const matchGid = targetUrl.match(/gid=([0-9]+)/);
+      const gid = matchGid ? matchGid[1] : "179874347";
+      
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+      
+      const response = await fetch(csvUrl);
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Aviso de Permissão: A planilha está definida como Restrita (privada). Altere as configurações de compartilhamento no Google Sheets para 'Qualquer pessoa com o link' para permitir a leitura.");
+        }
+        throw new Error("HTTP Erro " + response.status + ". Verifique se o ID ou URL da planilha do Google estão corretos.");
+      }
+      const csvText = await response.text();
+      
+      // 3. Robust CSV Parser
+      const rows: string[][] = [];
+      let currentRow: string[] = [""];
+      let inQuotes = false;
+      
+      for (let i = 0; i < csvText.length; i++) {
+        const char = csvText[i];
+        const nextChar = csvText[i + 1];
+        
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            currentRow[currentRow.length - 1] += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          currentRow.push("");
+        } else if ((char === '\r' || char === '\n') && !inQuotes) {
+          if (char === '\r' && nextChar === '\n') {
+            i++;
+          }
+          rows.push(currentRow);
+          currentRow = [""];
+        } else {
+          currentRow[currentRow.length - 1] += char;
+        }
+      }
+      if (currentRow.length > 1 || currentRow[0] !== "") {
+        rows.push(currentRow);
+      }
+
+      if (rows.length <= 1) {
+        handlePersistRequests([]);
+        setIsLoadingSheets(false);
+        return true;
+      }
+
+      // Map rows to VisitRequest structure using dynamic column matching
+      const headers = rows[0].map(h => h.toLowerCase().trim());
+
+      // Matching helper
+      const findColIdx = (choices: string[], exclude?: string[]) => {
+        for (const choice of choices) {
+          const idx = headers.findIndex(h => {
+            const matches = h.includes(choice);
+            const excluded = exclude ? exclude.some(ex => h.includes(ex)) : false;
+            return matches && !excluded;
+          });
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      const nameIdx = findColIdx(['1. nome completo', 'nome completo', 'nome', 'candidato']);
+      const emailIdx = findColIdx(['2. e-mail', 'e-mail', 'email'], ['endereço', 'endereco']);
+      const phoneIdx = findColIdx(['3. telefone', 'telefone', 'whatsapp', 'celular', 'contato']);
+      const profileIdx = findColIdx(['5. perfil', 'perfil']);
+      const institutionIdx = findColIdx(['4. instituição', 'instituição', 'instituicao', 'empresa', 'origem']);
+      const dateIdx = findColIdx(['7. data', 'data desejada', 'data'], ['carimbo']);
+      const timeIdx = findColIdx(['8. horário', 'horário', 'horario', 'turno']);
+      const visitorsIdx = findColIdx(['6. quantidade', 'quantidade', 'visitantes', 'visitantescount', 'nº de visitantes', 'no visitantes']);
+      const purposeIdx = findColIdx(['9. objetivo', 'objetivo', 'purpose', 'motivo']);
+      const statusIdx = findColIdx(['status da visita', 'status', 'situação', 'situacao', 'decisão', 'decisao']);
+      const idIdx = findColIdx(['id', 'código', 'codigo'], ['quantidade']);
+      const obsIdx = findColIdx(['10. observações', 'observações', 'observacoes'], ['quantidade']);
+
+      const mappedRequests: VisitRequest[] = rows.slice(1).map((row, index) => {
+        // Skip empty or invalid rows
+        if (row.length < 3) return null;
+
+        // Resolve Name (compulsory)
+        const name = nameIdx !== -1 && row[nameIdx] ? row[nameIdx].trim() : '';
+        if (!name) return null;
+
+        // Email
+        const email = emailIdx !== -1 && row[emailIdx] ? row[emailIdx].trim() : '';
+
+        // ID - Resolves true WS-XXXXXX pattern or falls back to stable, unique combination
+        let id = '';
+        const rawIdValue = idIdx !== -1 && row[idIdx] ? row[idIdx].trim() : '';
+        const rawObsValue = obsIdx !== -1 && row[obsIdx] ? row[obsIdx].trim() : '';
+
+        if (rawIdValue && rawIdValue.startsWith('WS-') && /^[WS0-9\-]+$/.test(rawIdValue)) {
+          id = rawIdValue;
+        } else if (rawObsValue && rawObsValue.startsWith('WS-') && /^[WS0-9\-]+$/.test(rawObsValue)) {
+          id = rawObsValue;
+        } else {
+          const timestamp = row[0] ? row[0].trim() : '';
+          const namePart = name.substring(0, 10);
+          const emailPart = email ? email.split('@')[0] : '';
+          const combined = `${timestamp}_${namePart}_${emailPart}`;
+          id = combined.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+          if (!id) {
+            id = `WS-${index}-${Math.floor(100000 + Math.random() * 900000)}`;
+          }
+        }
+
+        // Phone
+        const phone = phoneIdx !== -1 && row[phoneIdx] ? row[phoneIdx].trim() : '';
+
+        // Profile
+        const profileRaw = profileIdx !== -1 && row[profileIdx] ? row[profileIdx].toLowerCase() : '';
+        let profile: 'estudante' | 'profissional' | 'entusiasta' = 'entusiasta';
+        if (profileRaw.includes('estudante') || profileRaw.includes('aluno')) {
+          profile = 'estudante';
+        } else if (profileRaw.includes('profissional') || profileRaw.includes('empresa') || profileRaw.includes('parceiro')) {
+          profile = 'profissional';
+        }
+
+        // Institution
+        const institution = institutionIdx !== -1 && row[institutionIdx] ? row[institutionIdx].trim() : 'N/A';
+
+        // Date
+        const dateRaw = dateIdx !== -1 && row[dateIdx] ? row[dateIdx].trim() : '';
+        const date = dateRaw.replace(/"/g, '');
+
+        // Time
+        const turnoRaw = timeIdx !== -1 && row[timeIdx] ? row[timeIdx].toLowerCase() : '';
+        const time: 'manha' | 'tarde' = (turnoRaw.includes('tarde') || turnoRaw.includes('vespertino') || turnoRaw.includes('t')) ? 'tarde' : 'manha';
+
+        // Visitors Count
+        let visitorsCount = 1;
+        if (visitorsIdx !== -1 && row[visitorsIdx]) {
+          const rawVisitors = row[visitorsIdx].trim();
+          const parsed = parseInt(rawVisitors, 10);
+          if (!isNaN(parsed)) {
+            visitorsCount = parsed;
+          } else {
+            const match = rawVisitors.match(/\d+/);
+            if (match) visitorsCount = parseInt(match[0], 10);
+          }
+        }
+
+        // Purpose
+        const purpose = purposeIdx !== -1 && row[purposeIdx] ? row[purposeIdx].trim() : '';
+
+        // Status
+        let status: 'pendente' | 'aprovado' | 'rejeitado' = 'pendente';
+        if (statusIdx !== -1 && row[statusIdx]) {
+          const statusRaw = row[statusIdx].toLowerCase();
+          if (statusRaw.includes('aprovado') || statusRaw.includes('autorizado') || statusRaw.includes('confirmado')) {
+            status = 'aprovado';
+          } else if (statusRaw.includes('rejeitado') || statusRaw.includes('negado') || statusRaw.includes('rejeito')) {
+            status = 'rejeitado';
+          }
+        } else {
+          const lastColVal = (row[row.length - 1] || '').toLowerCase();
+          if (lastColVal.includes('aprovado')) status = 'aprovado';
+          else if (lastColVal.includes('rejeitado')) status = 'rejeitado';
+        }
+
+        // Created At
+        const createdAt = row[0] || new Date().toISOString();
+
+        return {
+          id,
+          name,
+          email,
+          phone,
+          profile,
+          institution,
+          date,
+          time,
+          visitorsCount,
+          purpose,
+          status,
+          createdAt
+        };
+      }).filter((r): r is VisitRequest => r !== null);
+
+      // Apply session overrides to bypass Google Sheets /export caching delays (up to several seconds/minutes)
+      const finalizedRequests = mappedRequests.map(req => {
+        if (statusOverrides.current[req.id]) {
+          return { ...req, status: statusOverrides.current[req.id] };
+        }
+        return req;
+      });
+
+      // Sort newest submissions on top
+      finalizedRequests.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      handlePersistRequests(finalizedRequests);
+      setIsLoadingSheets(false);
+      return true;
+    } catch (err: any) {
+      console.error("Failed to fetch/parse sheet CSV:", err);
+      setIsLoadingSheets(false);
+      if (err instanceof TypeError) {
+        setSheetError("Erro de acesso/rede (bloqueio CORS). A planilha do Google pode ser privada. Altere o compartilhamento dela para 'Qualquer pessoa com o link'.");
+      } else {
+        setSheetError(err.message || String(err));
+      }
+      return false;
+    }
   };
 
   // Create a new request in State (+ options background AppScript transmission)
@@ -130,6 +323,11 @@ export default function App() {
           },
           body: JSON.stringify(freshRecord)
         });
+        
+        // Refetch right after submitting to show in the Dashboard real quick!
+        setTimeout(() => {
+          fetchRequestsFromSheets();
+        }, 1200);
       } catch (e) {
         console.error("Direct Apps Script dispatch failed:", e);
       }
@@ -138,8 +336,13 @@ export default function App() {
     return true;
   };
 
-  // Change request status (Approve / Reject)
-  const handleUpdateStatus = (id: string, status: 'aprovado' | 'rejeitado') => {
+  // Change request status (Approve / Reject) and sync bidirectionally with Google Sheets
+  const handleUpdateStatus = async (id: string, status: 'aprovado' | 'rejeitado') => {
+    // Record status locally so we bypass any temporary Google Sheet caching delay on subsequent fetch
+    statusOverrides.current[id] = status;
+
+    const reqObj = requests.find(r => r.id === id);
+
     const updated = requests.map(req => {
       if (req.id === id) {
         return { ...req, status };
@@ -147,12 +350,69 @@ export default function App() {
       return req;
     });
     handlePersistRequests(updated);
+
+    if (integration.appScriptUrl) {
+      try {
+        await fetch(integration.appScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'updateStatus',
+            id,
+            status,
+            name: reqObj?.name || '',
+            email: reqObj?.email || '',
+            date: reqObj?.date || '',
+            time: reqObj?.time || '',
+            timestamp: reqObj?.createdAt || ''
+          })
+        });
+        // refresh status from Sheets real-time to align columns
+        setTimeout(() => {
+          fetchRequestsFromSheets();
+        }, 1500);
+      } catch (err) {
+        console.error("Failed to propagate status change to AppsScript:", err);
+      }
+    }
   };
 
-  // Dismiss a request
-  const handleDeleteRequest = (id: string) => {
+  // Dismiss a request and sync with Sheets delete action
+  const handleDeleteRequest = async (id: string) => {
+    // Clear overridden status for this ID of interest
+    delete statusOverrides.current[id];
+
+    const targetReq = requests.find(r => r.id === id);
+
     const updated = requests.filter(req => req.id !== id);
     handlePersistRequests(updated);
+
+    if (integration.appScriptUrl) {
+      try {
+        await fetch(integration.appScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'delete',
+            id,
+            name: targetReq?.name || '',
+            email: targetReq?.email || '',
+            timestamp: targetReq?.createdAt || ''
+          })
+        });
+        setTimeout(() => {
+          fetchRequestsFromSheets();
+        }, 1500);
+      } catch (err) {
+        console.error("Failed to delete record on Google Sheet via AppsScript:", err);
+      }
+    }
   };
 
   // Update cloud connection coordinates
@@ -160,6 +420,9 @@ export default function App() {
     const updated = { ...integration, ...settings };
     setIntegration(updated);
     localStorage.setItem('WS_INTEGRATION_SETTINGS', JSON.stringify(updated));
+    if (settings.googleSheetUrl) {
+      fetchRequestsFromSheets(settings.googleSheetUrl);
+    }
   };
 
   // Sequential push of all stored requests to Sheets API
@@ -271,6 +534,10 @@ export default function App() {
                   integrationSettings={integration}
                   onUpdateIntegration={handleUpdateIntegration}
                   onSyncAllWithSheets={handleSyncAllWithSheets}
+                  isLoadingSheets={isLoadingSheets}
+                  onRefreshFromSheets={() => fetchRequestsFromSheets()}
+                  sheetError={sheetError}
+                  onClearSheetError={() => setSheetError(null)}
                 />
               )}
             </motion.div>
