@@ -6,6 +6,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Anchor, Ship, GraduationCap, Award, Compass, ArrowRight } from 'lucide-react';
+import heroImage from '../assets/images/wilsonsons_terminal_1780092966464.png';
 
 interface HomeSectionProps {
   onNavigateToScheduling: () => void;
@@ -13,8 +14,7 @@ interface HomeSectionProps {
 }
 
 export default function HomeSection({ onNavigateToScheduling, onNavigateToSafety }: HomeSectionProps) {
-  // Hardcoded image path generated earlier for the port terminal
-  const heroImageSrc = "/src/assets/images/wilsonsons_terminal_1780092966464.png";
+  const heroImageSrc = heroImage;
 
   const objectives = [
     {
